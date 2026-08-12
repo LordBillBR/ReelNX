@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/logo.png" alt="ReelNX" width="160" />
+  <img src="images/readme_banner.png" alt="ReelNX" width="720" />
 </p>
 
 <h1 align="center">ReelNX</h1>
