@@ -27,7 +27,9 @@ std::string lowerCopy(std::string value) {
 
 int streamQualityScore(const stremio::Stream& stream) {
     std::string blob = lowerCopy(stream.name + " " + stream.title + " " + stream.description);
-    if (blob.find("2160p") != std::string::npos || blob.find("4k") != std::string::npos) return 4;
+    if (blob.find("2160p") != std::string::npos || blob.find("1440p") != std::string::npos ||
+        blob.find("4k") != std::string::npos)
+        return 4;
     if (blob.find("1080p") != std::string::npos) return 3;
     if (blob.find("720p") != std::string::npos) return 2;
     if (blob.find("480p") != std::string::npos) return 1;
@@ -35,6 +37,7 @@ int streamQualityScore(const stremio::Stream& stream) {
 }
 
 bool isHdStream(const stremio::Stream& stream) { return streamQualityScore(stream) >= 2; }
+bool isSwitchFriendlyStream(const stremio::Stream& stream) { return streamQualityScore(stream) < 4; }
 
 // Fetches subtitles from the configured subtitles addon (SubSource etc.) for
 // the title being played and attaches them to MPV once the file is loaded.
@@ -243,7 +246,7 @@ StreamPicker::StreamPicker(
     // Keep only playable streams so the user can't select a dead entry.
     std::vector<stremio::Stream> playable;
     for (auto& s : streams)
-        if (!s.url.empty()) playable.push_back(s);
+        if (!s.url.empty() && isSwitchFriendlyStream(s)) playable.push_back(s);
     this->allStreams = std::move(playable);
 
     this->applyStreamView();
