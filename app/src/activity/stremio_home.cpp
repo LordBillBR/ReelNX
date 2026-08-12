@@ -400,6 +400,7 @@ void StremioHome::updateActionBar() {
             {brls::BUTTON_Y, "Search"},
             {brls::BUTTON_BACK, "Account"},
             {brls::BUTTON_RB, "Import File"},
+            {brls::BUTTON_START, "Exit"},
         });
     } else if (rowContext) {
         std::vector<ActionBar::Item> actions = {{brls::BUTTON_A, primary}};
@@ -407,6 +408,7 @@ void StremioHome::updateActionBar() {
         actions.push_back({brls::BUTTON_Y, "Search"});
         actions.push_back({brls::BUTTON_BACK, "Account"});
         actions.push_back({brls::BUTTON_RB, "Import File"});
+        actions.push_back({brls::BUTTON_START, "Exit"});
         this->actionBar->setActions(actions);
     } else {
         this->actionBar->setActions({
@@ -414,6 +416,7 @@ void StremioHome::updateActionBar() {
             {brls::BUTTON_Y, "Search"},
             {brls::BUTTON_BACK, "Account"},
             {brls::BUTTON_RB, "Import File"},
+            {brls::BUTTON_START, "Exit"},
         });
     }
 }

@@ -59,25 +59,29 @@ public:
         int ticket = ++this->requestTicket;
         auto pending = std::make_shared<int>((int)addons.size());
         auto results = std::make_shared<std::vector<stremio::Subtitle>>();
+        auto finish = [this, ticket, pending, results]() {
+            if (ticket != this->requestTicket) return;
+            if (--(*pending) != 0) return;
+            std::vector<std::string> seen;
+            for (auto& s : *results) {
+                if (this->pending.size() >= 24) break;
+                if (std::find(seen.begin(), seen.end(), s.lang) != seen.end()) continue;
+                seen.push_back(s.lang);
+                this->pending.push_back(s);
+            }
+            brls::Logger::info("subtitles loaded: {}", this->pending.size());
+            if (this->fileLoaded) this->attach();
+        };
         for (auto& addon : addons) {
             std::string url = addon + "/subtitles/" + type + "/" + id + ".json";
             stremio::getJSON<stremio::SubtitleList>(
-                [this, ticket, pending, results](stremio::SubtitleList r) {
-                    if (ticket != this->requestTicket) return;
+                [results, finish](stremio::SubtitleList r) {
                     results->insert(results->end(), r.subtitles.begin(), r.subtitles.end());
-                    if (--(*pending) != 0) return;
-                    std::vector<std::string> seen;
-                    for (auto& s : *results) {
-                        if (this->pending.size() >= 24) break;
-                        if (std::find(seen.begin(), seen.end(), s.lang) != seen.end()) continue;
-                        seen.push_back(s.lang);
-                        this->pending.push_back(s);
-                    }
-                    if (this->fileLoaded) this->attach();
+                    finish();
                 },
-                [pending](const std::string& e) {
+                [finish](const std::string& e) {
                     brls::Logger::warning("subtitles addon: {}", e);
-                    --(*pending);
+                    finish();
                 },
                 url);
         }
