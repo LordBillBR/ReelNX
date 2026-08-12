@@ -106,6 +106,19 @@ inline std::string normalizeAddonUrl(std::string s) {
     return s;
 }
 
+inline std::string urlHost(const std::string& url) {
+    auto scheme = url.find("://");
+    auto start = scheme == std::string::npos ? 0 : scheme + 3;
+    auto end = url.find('/', start);
+    return url.substr(start, end == std::string::npos ? std::string::npos : end - start);
+}
+
+inline std::string requestError(const std::string& url, const std::string& message) {
+    auto host = urlHost(url);
+    if (host.empty()) return message;
+    return fmt::format("{} ({})", message, host);
+}
+
 // A poster template must be http(s) and contain the {imdbId} placeholder.
 inline std::string normalizePosterTemplate(std::string s) {
     s = trimJunk(s);
@@ -233,8 +246,12 @@ inline void importAddonFromFile(const std::string& configDir) {
         std::string effectiveUrl = url.empty() ? STREAM_ADDON : url;
         if (effectiveUrl != STREAM_ADDON || poster != POSTER_TEMPLATE || subs != SUBTITLES_ADDON) {
             STREAM_ADDON = effectiveUrl;
+            STREAM_ADDONS.clear();
+            if (!STREAM_ADDON.empty()) STREAM_ADDONS.push_back(STREAM_ADDON);
             POSTER_TEMPLATE = poster;
             SUBTITLES_ADDON = subs;
+            SUBTITLES_ADDONS.clear();
+            if (!SUBTITLES_ADDON.empty()) SUBTITLES_ADDONS.push_back(SUBTITLES_ADDON);
             saveConfig(configDir);
             brls::Logger::info("settings imported from {}", path);
         }
@@ -269,7 +286,7 @@ inline void getJSON(std::function<void(Result)> then, OnError error, const std::
                     return;
                 }
             } catch (const std::exception& ex) {
-                lastErr = ex.what();
+                lastErr = requestError(url, ex.what());
             }
 
             auto decision = api::retryDecision(attempt, maxAttempts, statusCode, retryAfter);
