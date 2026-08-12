@@ -90,23 +90,34 @@ inline void syncAccountAddons(
                 auto base = accountString(addon, "transportUrl");
                 if (base.empty()) continue;
                 auto manifest = addon.value("manifest", nlohmann::json::object());
+                bool addonMatched = false;
                 for (auto& resource : manifest.value("resources", nlohmann::json::array())) {
                     auto name = resource.is_string() ? resource.get<std::string>() : accountString(resource, "name");
-                    if (name == "stream" &&
-                        std::find(streamAddons.begin(), streamAddons.end(), base) == streamAddons.end())
+                    if (hasAddonResource(name, "stream") &&
+                        std::find(streamAddons.begin(), streamAddons.end(), base) == streamAddons.end()) {
                         streamAddons.push_back(base);
-                    if (name == "subtitles" &&
-                        std::find(subtitleAddons.begin(), subtitleAddons.end(), base) == subtitleAddons.end())
+                        addonMatched = true;
+                    }
+                    if (hasAddonResource(name, "subtitle") &&
+                        std::find(subtitleAddons.begin(), subtitleAddons.end(), base) == subtitleAddons.end()) {
                         subtitleAddons.push_back(base);
+                        addonMatched = true;
+                    }
                 }
-                if (!streamAddons.empty() || !subtitleAddons.empty()) ++count;
+                if (addonMatched) ++count;
             }
-            if (streamAddons.empty()) throw std::runtime_error("no stream addon in Stremio account");
             STREAM_ADDONS.clear();
-            for (auto& addon : streamAddons) STREAM_ADDONS.push_back(normalizeAddonUrl(addon));
+            for (auto& addon : streamAddons) {
+                auto normalized = normalizeAddonUrl(addon);
+                if (!normalized.empty()) STREAM_ADDONS.push_back(normalized);
+            }
+            if (STREAM_ADDONS.empty()) throw std::runtime_error("no stream addon in Stremio account");
             STREAM_ADDON = STREAM_ADDONS.front();
             SUBTITLES_ADDONS.clear();
-            for (auto& addon : subtitleAddons) SUBTITLES_ADDONS.push_back(normalizeAddonUrl(addon));
+            for (auto& addon : subtitleAddons) {
+                auto normalized = normalizeAddonUrl(addon);
+                if (!normalized.empty()) SUBTITLES_ADDONS.push_back(normalized);
+            }
             SUBTITLES_ADDON = SUBTITLES_ADDONS.empty() ? "" : SUBTITLES_ADDONS.front();
             saveConfig(configDir);
             brls::sync([then, count]() { then(count); });

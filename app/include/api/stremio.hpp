@@ -11,6 +11,7 @@
 
 #include <nlohmann/json.hpp>
 #include <borealis/core/logger.hpp>
+#include <borealis/core/assets.hpp>
 #include <borealis/core/thread.hpp>
 #include "api/http.hpp"
 #include "api/retry_policy.hpp"
@@ -106,6 +107,23 @@ inline std::string normalizeAddonUrl(std::string s) {
     return s;
 }
 
+inline std::string urlHost(const std::string& url) {
+    auto scheme = url.find("://");
+    auto start = scheme == std::string::npos ? 0 : scheme + 3;
+    auto end = url.find('/', start);
+    return url.substr(start, end == std::string::npos ? std::string::npos : end - start);
+}
+
+inline std::string requestError(const std::string& url, const std::string& message) {
+    auto host = urlHost(url);
+    if (host.empty()) return message;
+    return fmt::format("{} ({})", message, host);
+}
+
+inline bool hasAddonResource(const std::string& name, const std::string& resource) {
+    return name == resource || name == resource + "s";
+}
+
 // A poster template must be http(s) and contain the {imdbId} placeholder.
 inline std::string normalizePosterTemplate(std::string s) {
     s = trimJunk(s);
@@ -131,6 +149,11 @@ inline std::string posterUrl(const std::string& id, const std::string& fallback)
         return url;
     }
     return fallback;
+}
+
+inline const std::string& defaultPosterUrl() {
+    static const std::string url = BRLS_ASSET("img/reelnx/poster2-3.png");
+    return url;
 }
 
 inline std::string addonConfigPath(const std::string& configDir) { return configDir + "/stremio_addon.json"; }
@@ -183,6 +206,7 @@ inline void loadAddon(const std::string& configDir) {
         }
         if (SUBTITLES_ADDONS.empty() && !SUBTITLES_ADDON.empty()) SUBTITLES_ADDONS.push_back(SUBTITLES_ADDON);
         if (!SUBTITLES_ADDONS.empty()) SUBTITLES_ADDON = SUBTITLES_ADDONS.front();
+        brls::Logger::info("addons loaded: streams={} subtitles={}", STREAM_ADDONS.size(), SUBTITLES_ADDONS.size());
     } catch (const std::exception& e) {
         brls::Logger::warning("loadAddon: {}", e.what());
     }
@@ -211,7 +235,9 @@ inline void importAddonFromFile(const std::string& configDir) {
         std::ifstream in(path);
         if (!in.is_open()) continue;
 
-        std::string url, poster, subs, line;
+        std::vector<std::string> urls;
+        std::vector<std::string> subtitleUrls;
+        std::string poster, line;
         while (std::getline(in, line)) {
             line = trimJunk(line);
             if (line.rfind("poster=", 0) == 0) {
@@ -220,23 +246,29 @@ inline void importAddonFromFile(const std::string& configDir) {
                 std::string key = trimJunk(line.substr(5));
                 if (!key.empty()) poster = rpdbTemplate(key);
             } else if (line.rfind("subtitles=", 0) == 0) {
-                subs = normalizeAddonUrl(line.substr(10));
+                auto subs = normalizeAddonUrl(line.substr(10));
+                if (!subs.empty()) subtitleUrls.push_back(subs);
             } else if (!line.empty() && line[0] != '#') {
                 std::string u = normalizeAddonUrl(line);
-                if (!u.empty()) url = u;
+                if (!u.empty()) urls.push_back(u);
             }
         }
 
         // The file is the source of truth: apply all values (an absent
         // rpdb/poster/subtitles line turns that feature off again). A missing
         // addon line never wipes a working addon URL.
-        std::string effectiveUrl = url.empty() ? STREAM_ADDON : url;
-        if (effectiveUrl != STREAM_ADDON || poster != POSTER_TEMPLATE || subs != SUBTITLES_ADDON) {
-            STREAM_ADDON = effectiveUrl;
+        std::vector<std::string> effectiveUrls = urls.empty() ? STREAM_ADDONS : urls;
+        if (effectiveUrls.empty() && !STREAM_ADDON.empty()) effectiveUrls.push_back(STREAM_ADDON);
+        bool changed = effectiveUrls != STREAM_ADDONS || poster != POSTER_TEMPLATE || subtitleUrls != SUBTITLES_ADDONS;
+        if (changed) {
+            STREAM_ADDONS = std::move(effectiveUrls);
+            STREAM_ADDON = STREAM_ADDONS.empty() ? "" : STREAM_ADDONS.front();
             POSTER_TEMPLATE = poster;
-            SUBTITLES_ADDON = subs;
+            SUBTITLES_ADDONS = std::move(subtitleUrls);
+            SUBTITLES_ADDON = SUBTITLES_ADDONS.empty() ? "" : SUBTITLES_ADDONS.front();
             saveConfig(configDir);
-            brls::Logger::info("settings imported from {}", path);
+            brls::Logger::info("settings imported from {}: streams={} subtitles={}", path, STREAM_ADDONS.size(),
+                SUBTITLES_ADDONS.size());
         }
         return;  // first file found wins
     }
@@ -269,7 +301,7 @@ inline void getJSON(std::function<void(Result)> then, OnError error, const std::
                     return;
                 }
             } catch (const std::exception& ex) {
-                lastErr = ex.what();
+                lastErr = requestError(url, ex.what());
             }
 
             auto decision = api::retryDecision(attempt, maxAttempts, statusCode, retryAfter);
@@ -634,6 +666,7 @@ inline void fetchStreams(
         return;
     }
     aggregate->pending = addons.size() * types->size();
+    brls::Logger::info("fetchStreams: querying {} addon(s) across {} type(s)", addons.size(), types->size());
     auto finish = [aggregate, then, error, type]() {
         if (--aggregate->pending != 0) return;
         if (!aggregate->anyOk && aggregate->streams.empty()) {

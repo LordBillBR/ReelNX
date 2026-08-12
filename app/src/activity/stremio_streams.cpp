@@ -27,7 +27,9 @@ std::string lowerCopy(std::string value) {
 
 int streamQualityScore(const stremio::Stream& stream) {
     std::string blob = lowerCopy(stream.name + " " + stream.title + " " + stream.description);
-    if (blob.find("2160p") != std::string::npos || blob.find("4k") != std::string::npos) return 4;
+    if (blob.find("2160p") != std::string::npos || blob.find("1440p") != std::string::npos ||
+        blob.find("4k") != std::string::npos)
+        return 4;
     if (blob.find("1080p") != std::string::npos) return 3;
     if (blob.find("720p") != std::string::npos) return 2;
     if (blob.find("480p") != std::string::npos) return 1;
@@ -35,6 +37,7 @@ int streamQualityScore(const stremio::Stream& stream) {
 }
 
 bool isHdStream(const stremio::Stream& stream) { return streamQualityScore(stream) >= 2; }
+bool isSwitchFriendlyStream(const stremio::Stream& stream) { return streamQualityScore(stream) < 4; }
 
 // Fetches subtitles from the configured subtitles addon (SubSource etc.) for
 // the title being played and attaches them to MPV once the file is loaded.
@@ -59,25 +62,29 @@ public:
         int ticket = ++this->requestTicket;
         auto pending = std::make_shared<int>((int)addons.size());
         auto results = std::make_shared<std::vector<stremio::Subtitle>>();
+        auto finish = [this, ticket, pending, results]() {
+            if (ticket != this->requestTicket) return;
+            if (--(*pending) != 0) return;
+            std::vector<std::string> seen;
+            for (auto& s : *results) {
+                if (this->pending.size() >= 24) break;
+                if (std::find(seen.begin(), seen.end(), s.lang) != seen.end()) continue;
+                seen.push_back(s.lang);
+                this->pending.push_back(s);
+            }
+            brls::Logger::info("subtitles loaded: {}", this->pending.size());
+            if (this->fileLoaded) this->attach();
+        };
         for (auto& addon : addons) {
             std::string url = addon + "/subtitles/" + type + "/" + id + ".json";
             stremio::getJSON<stremio::SubtitleList>(
-                [this, ticket, pending, results](stremio::SubtitleList r) {
-                    if (ticket != this->requestTicket) return;
+                [results, finish](stremio::SubtitleList r) {
                     results->insert(results->end(), r.subtitles.begin(), r.subtitles.end());
-                    if (--(*pending) != 0) return;
-                    std::vector<std::string> seen;
-                    for (auto& s : *results) {
-                        if (this->pending.size() >= 24) break;
-                        if (std::find(seen.begin(), seen.end(), s.lang) != seen.end()) continue;
-                        seen.push_back(s.lang);
-                        this->pending.push_back(s);
-                    }
-                    if (this->fileLoaded) this->attach();
+                    finish();
                 },
-                [pending](const std::string& e) {
+                [finish](const std::string& e) {
                     brls::Logger::warning("subtitles addon: {}", e);
-                    --(*pending);
+                    finish();
                 },
                 url);
         }
@@ -239,7 +246,7 @@ StreamPicker::StreamPicker(
     // Keep only playable streams so the user can't select a dead entry.
     std::vector<stremio::Stream> playable;
     for (auto& s : streams)
-        if (!s.url.empty()) playable.push_back(s);
+        if (!s.url.empty() && isSwitchFriendlyStream(s)) playable.push_back(s);
     this->allStreams = std::move(playable);
 
     this->applyStreamView();

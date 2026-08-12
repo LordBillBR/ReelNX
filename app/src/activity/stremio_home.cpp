@@ -96,7 +96,8 @@ public:
         };
 
         std::string poster = stremio::posterUrl(item.id, item.poster);
-        if (!poster.empty()) Image::with(cell->picture, poster);
+        cell->picture->setImageFromRes("img/reelnx/poster2-3.png");
+        if (!poster.empty()) Image::with(cell->picture, poster, stremio::defaultPosterUrl());
 
         return cell;
     }
@@ -152,7 +153,8 @@ public:
         cell->onToggleFav = [item]() { Favourites::instance().toggle(item); };
 
         std::string poster = stremio::posterUrl(item.id, item.poster);
-        if (!poster.empty()) Image::with(cell->picture, poster);
+        cell->picture->setImageFromRes("img/reelnx/poster2-3.png");
+        if (!poster.empty()) Image::with(cell->picture, poster, stremio::defaultPosterUrl());
         return cell;
     }
 
@@ -211,7 +213,8 @@ public:
             bool nowFav = Favourites::instance().toggle(item);
             cell->badgeFavorite->setVisibility(nowFav ? brls::Visibility::VISIBLE : brls::Visibility::INVISIBLE);
         };
-        if (!item.poster.empty()) Image::with(cell->picture, item.poster);
+        cell->picture->setImageFromRes("img/reelnx/poster2-3.png");
+        if (!item.poster.empty()) Image::with(cell->picture, item.poster, stremio::defaultPosterUrl());
         return cell;
     }
 
@@ -267,7 +270,8 @@ public:
         // posterUrl strips ":season:episode", so with a poster provider set,
         // series resolve to the SERIES poster instead of an episode thumb.
         std::string poster = stremio::posterUrl(e.streamId, e.poster);
-        if (!poster.empty()) Image::with(cell->picture, poster);
+        cell->picture->setImageFromRes("img/reelnx/poster2-3.png");
+        if (!poster.empty()) Image::with(cell->picture, poster, stremio::defaultPosterUrl());
 
         return cell;
     }
@@ -345,9 +349,15 @@ StremioHome::StremioHome() {
         return true;
     });
 
-    // − opens addon/account setup via QR login.
+    // − opens addon/account setup via QR login. R imports an SD-card addon
+    // file only when the user explicitly asks for it.
     this->registerAction("Stream Addon", brls::BUTTON_BACK, [](brls::View*) {
         brls::Application::pushActivity(new brls::Activity(new StremioLogin()));
+        return true;
+    });
+    this->registerAction("Import Addon File", brls::BUTTON_RB, [](brls::View*) {
+        stremio::importAddonFromFile(AppConfig::instance().configDir());
+        brls::Application::notify(stremio::STREAM_ADDON.empty() ? "No addon imported" : "Addon file imported");
         return true;
     });
 }
@@ -393,18 +403,24 @@ void StremioHome::updateActionBar() {
             {brls::BUTTON_X, "Remove"},
             {brls::BUTTON_Y, "Search"},
             {brls::BUTTON_BACK, "Account"},
+            {brls::BUTTON_RB, "Import File"},
+            {brls::BUTTON_START, "Exit"},
         });
     } else if (rowContext) {
         std::vector<ActionBar::Item> actions = {{brls::BUTTON_A, primary}};
         if (canToggleList) actions.push_back({brls::BUTTON_X, "My List"});
         actions.push_back({brls::BUTTON_Y, "Search"});
         actions.push_back({brls::BUTTON_BACK, "Account"});
+        actions.push_back({brls::BUTTON_RB, "Import File"});
+        actions.push_back({brls::BUTTON_START, "Exit"});
         this->actionBar->setActions(actions);
     } else {
         this->actionBar->setActions({
             {brls::BUTTON_A, "Select"},
             {brls::BUTTON_Y, "Search"},
             {brls::BUTTON_BACK, "Account"},
+            {brls::BUTTON_RB, "Import File"},
+            {brls::BUTTON_START, "Exit"},
         });
     }
 }

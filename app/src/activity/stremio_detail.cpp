@@ -115,7 +115,8 @@ StremioDetail::StremioDetail(const stremio::Meta& item) : item(item) {
     this->poster->setFreeTexture(false);
     row->addView(this->poster);
     std::string posterSrc = stremio::posterUrl(item.id, item.poster);
-    if (!posterSrc.empty()) Image::with(this->poster, posterSrc);
+    this->poster->setImageFromRes("img/reelnx/poster2-3.png");
+    if (!posterSrc.empty()) Image::with(this->poster, posterSrc, stremio::defaultPosterUrl());
 
     // ---- Info column (right) ----------------------------------------------
     auto* info = new brls::Box();

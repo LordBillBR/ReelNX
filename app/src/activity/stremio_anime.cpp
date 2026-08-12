@@ -66,7 +66,8 @@ public:
             cell->badgeFavorite->setVisibility(nowFav ? brls::Visibility::VISIBLE : brls::Visibility::INVISIBLE);
         };
 
-        if (!item.poster.empty()) Image::with(cell->picture, item.poster);
+        cell->picture->setImageFromRes("img/reelnx/poster2-3.png");
+        if (!item.poster.empty()) Image::with(cell->picture, item.poster, stremio::defaultPosterUrl());
         return cell;
     }
 

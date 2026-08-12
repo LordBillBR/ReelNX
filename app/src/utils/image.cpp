@@ -109,6 +109,13 @@ Image::Image() : image(nullptr) {
 Image::~Image() { brls::Logger::verbose("delete Image {}", fmt::ptr(this)); }
 
 void Image::with(brls::Image* view, const std::string& url, const std::string& fallback) {
+#ifdef USE_LIBROMFS
+    if (url.rfind("@res/", 0) == 0) {
+        view->setImageFromRes(url.substr(5));
+        return;
+    }
+#endif
+
     int tex = brls::TextureCache::instance().getCache(url);
     if (tex > 0) {
         view->innerSetImage(tex);

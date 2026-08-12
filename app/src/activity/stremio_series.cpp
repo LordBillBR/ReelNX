@@ -108,10 +108,11 @@ public:
 
         // Newly-aired episodes often have no still yet (metahub 404s); fall
         // back to the series backdrop instead of the grey placeholder.
+        cell->picture->setImageFromRes("img/reelnx/poster2-3.png");
         if (!v.thumbnail.empty())
-            Image::with(cell->picture, v.thumbnail, this->background);
+            Image::with(cell->picture, v.thumbnail, this->background.empty() ? stremio::defaultPosterUrl() : this->background);
         else if (!this->background.empty())
-            Image::with(cell->picture, this->background);
+            Image::with(cell->picture, this->background, stremio::defaultPosterUrl());
 
         return cell;
     }

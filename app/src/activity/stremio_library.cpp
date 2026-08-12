@@ -57,7 +57,8 @@ public:
         };
 
         std::string poster = stremio::posterUrl(item.id, item.poster);
-        if (!poster.empty()) Image::with(cell->picture, poster);
+        cell->picture->setImageFromRes("img/reelnx/poster2-3.png");
+        if (!poster.empty()) Image::with(cell->picture, poster, stremio::defaultPosterUrl());
         return cell;
     }
 

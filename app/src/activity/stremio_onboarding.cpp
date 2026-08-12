@@ -25,8 +25,8 @@ const std::array<OnboardingPage, 4> PAGES = {{
         "Use the D-pad or left stick to move focus. Press A for the visible primary action, B to go back, Y to search, and - for addon setup.",
         "Focused cards also show what A will do."},
     {"3 of 4", "Connect Stremio",
-        "Best option: scan the QR code, approve login in Stremio, and ReelNX will sync compatible addons. If QR is unavailable, enter an addon URL manually or place it in switch/ReelNX/reelnx-addon.txt.",
-        "Press X for QR login or Y for manual URL."},
+        "Scan the QR code and approve login in Stremio to sync compatible addons. Manual URL entry and SD-card file import are fallback options only.",
+        "Press X for QR login, Y for manual URL, or R to import reelnx-addon.txt."},
     {"4 of 4", "Ready to stream",
         "You can revisit this tutorial later from Settings > Show tutorial again. When you are ready, start browsing and pick a title.",
         "Press A to finish."},
@@ -95,6 +95,12 @@ StremioOnboarding::StremioOnboarding() {
         this->openManualAddonPrompt();
         return true;
     });
+    this->registerAction("Import File", brls::BUTTON_RB, [this](brls::View*) {
+        if (this->page != 2) return false;
+        stremio::importAddonFromFile(AppConfig::instance().configDir());
+        brls::Application::notify(stremio::STREAM_ADDON.empty() ? "No addon imported" : "Addon file imported");
+        return true;
+    });
 
     this->render();
 }
@@ -117,6 +123,7 @@ void StremioOnboarding::render() {
     if (this->page == 2) {
         actions.push_back({brls::BUTTON_X, "QR Login"});
         actions.push_back({brls::BUTTON_Y, "Manual URL"});
+        actions.push_back({brls::BUTTON_RB, "Import File"});
     }
     actions.push_back({brls::BUTTON_A, this->page + 1 == PAGES.size() ? "Done" : "Next"});
     this->actionBar->setActions(actions);
@@ -156,7 +163,7 @@ void StremioOnboarding::openManualAddonPrompt() {
             brls::Application::notify("Stream addon saved");
         },
         "Stream addon URL",
-        "Paste your addon URL, or put it in switch/ReelNX/reelnx-addon.txt and relaunch.",
+        "Paste your addon URL. To use switch/ReelNX/reelnx-addon.txt, choose Import File explicitly.",
         1024, stremio::STREAM_ADDON, 0);
 }
 
