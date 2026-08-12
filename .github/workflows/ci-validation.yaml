@@ -1,0 +1,52 @@
+name: CI Validation
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop-and-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            g++ \
+            libcurl4-openssl-dev \
+            libdbus-1-dev \
+            libgl1-mesa-dev \
+            libmpv-dev \
+            libssl-dev \
+            libwayland-dev \
+            libwebp-dev \
+            libx11-dev \
+            libxcursor-dev \
+            libxext-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libxkbcommon-dev \
+            libxrandr-dev \
+            ninja-build \
+            pkg-config \
+            wayland-protocols
+      - name: Check whitespace
+        run: git diff --check
+      - name: Configure desktop build
+        run: cmake -B build-reelnx -G Ninja -DPLATFORM_DESKTOP=ON
+      - name: Build desktop target
+        run: cmake --build build-reelnx --target ReelNX -j2
+      - name: Run TLS regression
+        run: scripts/test_tls.sh
+      - name: Run retry policy regression
+        run: scripts/test_retry_policy.sh

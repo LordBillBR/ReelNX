@@ -57,6 +57,8 @@ subtitles=https://your-subtitles-addon.example.com/...
 
 The QR account flow remains available for compatible addon synchronization.
 
+See `docs/CONFIGURATION.md` for the full runtime path and addon import behavior.
+
 ## Controls
 
 | Context | Button | Action |
@@ -95,6 +97,8 @@ The generated file is:
 ```text
 build_switch_reelnx/ReelNX.nro
 ```
+
+Before publishing a release, follow `docs/RELEASE_CHECKLIST.md`.
 
 Desktop builds are useful for quick compile checks:
 

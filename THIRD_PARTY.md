@@ -28,3 +28,5 @@ Switch builds use devkitPro/devkitA64/libnx and portlibs including libmpv, FFmpe
 ## Protocol Compatibility
 
 ReelNX supports the Stremio Addon Protocol. References to Stremio in technical code, protocol URLs, or addon compatibility documentation are protocol references only and do not imply endorsement or affiliation.
+
+Some inherited build scripts and vendored dependency metadata still reference upstream project names or URLs where those names identify dependency sources rather than ReelNX branding.
