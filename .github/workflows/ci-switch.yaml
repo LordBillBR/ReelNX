@@ -26,8 +26,8 @@ jobs:
           submodules: recursive
       - name: Install portlibs
         run: |
-          for pkg in mbedtls-3.6.5-1 libssh2-1.11.1-1 dav1d-1.5.3-1 curl-8.16.0-2 ffmpeg-7.1.5-5 libuam-master-1 libmpv-deko3d-0.36.0-5; do
-            dkp-pacman --noconfirm -U $BASE_URL/switch-${pkg}-any.pkg.tar.zst
+          for pkg in switch-mbedtls-3.6.5-1 switch-libssh2-1.11.1-1 switch-dav1d-1.5.3-1 switch-curl-8.16.0-2 switch-ffmpeg-7.1.5-5 libuam-master-1 switch-libmpv-deko3d-0.36.0-5; do
+            dkp-pacman --noconfirm -U $BASE_URL/${pkg}-any.pkg.tar.zst
           done
           git config --system --add safe.directory $GITHUB_WORKSPACE
       - name: Configure
