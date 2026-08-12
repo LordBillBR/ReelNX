@@ -345,9 +345,15 @@ StremioHome::StremioHome() {
         return true;
     });
 
-    // − opens addon/account setup via QR login.
+    // − opens addon/account setup via QR login. R imports an SD-card addon
+    // file only when the user explicitly asks for it.
     this->registerAction("Stream Addon", brls::BUTTON_BACK, [](brls::View*) {
         brls::Application::pushActivity(new brls::Activity(new StremioLogin()));
+        return true;
+    });
+    this->registerAction("Import Addon File", brls::BUTTON_RB, [](brls::View*) {
+        stremio::importAddonFromFile(AppConfig::instance().configDir());
+        brls::Application::notify(stremio::STREAM_ADDON.empty() ? "No addon imported" : "Addon file imported");
         return true;
     });
 }
@@ -393,18 +399,21 @@ void StremioHome::updateActionBar() {
             {brls::BUTTON_X, "Remove"},
             {brls::BUTTON_Y, "Search"},
             {brls::BUTTON_BACK, "Account"},
+            {brls::BUTTON_RB, "Import File"},
         });
     } else if (rowContext) {
         std::vector<ActionBar::Item> actions = {{brls::BUTTON_A, primary}};
         if (canToggleList) actions.push_back({brls::BUTTON_X, "My List"});
         actions.push_back({brls::BUTTON_Y, "Search"});
         actions.push_back({brls::BUTTON_BACK, "Account"});
+        actions.push_back({brls::BUTTON_RB, "Import File"});
         this->actionBar->setActions(actions);
     } else {
         this->actionBar->setActions({
             {brls::BUTTON_A, "Select"},
             {brls::BUTTON_Y, "Search"},
             {brls::BUTTON_BACK, "Account"},
+            {brls::BUTTON_RB, "Import File"},
         });
     }
 }

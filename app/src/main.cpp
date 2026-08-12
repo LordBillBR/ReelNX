@@ -68,11 +68,10 @@ int main(int argc, char* argv[]) {
     if (!conf.init()) {
         return 0;
     }
-    // Load the user's addon URL (set on first launch via the UI), then
-    // let a reelnx-addon.txt dropped on the SD card set/override it — much
-    // easier than typing a long URL on the on-screen keyboard.
+    // Load add-ons saved through QR login or explicit manual configuration.
+    // SD-card files are not imported automatically; the user must request it
+    // from the onboarding/home actions so QR login remains the primary path.
     stremio::loadAddon(conf.configDir());
-    stremio::importAddonFromFile(conf.configDir());
 
     // Init the app and i18n
     if (!brls::Application::init()) {
@@ -88,8 +87,8 @@ int main(int argc, char* argv[]) {
 
     brls::Application::createWindow(fmt::format("{} for {}", AppVersion::getPackageName(), AppVersion::getPlatform()));
 
-    // Have the application register an action on every activity that will quit when you press BUTTON_START
-    brls::Application::setGlobalQuit(false);
+    // Let + exit the app globally. - remains reserved for QR/account setup.
+    brls::Application::setGlobalQuit(true);
 
     // Register custom views (including tabs, which are views)
     brls::Application::registerXMLView("SVGImage", SVGImage::create);
