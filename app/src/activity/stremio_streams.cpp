@@ -1,0 +1,301 @@
+/*
+    Stremio stream picker -- implementation.
+
+    A compact, scrollable, selectable list of streams. Uses the file-list row
+    layout (small static icon + text, no thumbnails to load) so it scrolls fast.
+*/
+#include "activity/stremio_streams.hpp"
+#include "activity/stremio_resume.hpp"
+#include "view/recycling_grid.hpp"
+#include "view/svg_image.hpp"
+#include "view/mpv_core.hpp"
+#include "view/action_bar.hpp"
+#include "tab/remote_view.hpp"
+#include "api/stremio.hpp"
+
+#include <algorithm>
+#include <cctype>
+
+using namespace brls::literals;
+
+namespace {
+
+std::string lowerCopy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+    return value;
+}
+
+int streamQualityScore(const stremio::Stream& stream) {
+    std::string blob = lowerCopy(stream.name + " " + stream.title + " " + stream.description);
+    if (blob.find("2160p") != std::string::npos || blob.find("4k") != std::string::npos) return 4;
+    if (blob.find("1080p") != std::string::npos) return 3;
+    if (blob.find("720p") != std::string::npos) return 2;
+    if (blob.find("480p") != std::string::npos) return 1;
+    return 0;
+}
+
+bool isHdStream(const stremio::Stream& stream) { return streamQualityScore(stream) >= 2; }
+
+// Fetches subtitles from the configured subtitles addon (SubSource etc.) for
+// the title being played and attaches them to MPV once the file is loaded.
+// They then appear in the player's + menu Subtitle picker alongside any
+// embedded tracks.
+class SubLoader {
+public:
+    static SubLoader& instance() {
+        static SubLoader inst;
+        return inst;
+    }
+
+    // Call right before starting playback of {type, id}.
+    void prepare(const std::string& type, const std::string& id) {
+        this->init();
+        this->pending.clear();
+        this->fileLoaded = false;
+        auto addons = stremio::SUBTITLES_ADDONS;
+        if (addons.empty() && !stremio::SUBTITLES_ADDON.empty()) addons.push_back(stremio::SUBTITLES_ADDON);
+        if (addons.empty()) return;
+
+        int ticket = ++this->requestTicket;
+        auto pending = std::make_shared<int>((int)addons.size());
+        auto results = std::make_shared<std::vector<stremio::Subtitle>>();
+        for (auto& addon : addons) {
+            std::string url = addon + "/subtitles/" + type + "/" + id + ".json";
+            stremio::getJSON<stremio::SubtitleList>(
+                [this, ticket, pending, results](stremio::SubtitleList r) {
+                    if (ticket != this->requestTicket) return;
+                    results->insert(results->end(), r.subtitles.begin(), r.subtitles.end());
+                    if (--(*pending) != 0) return;
+                    std::vector<std::string> seen;
+                    for (auto& s : *results) {
+                        if (this->pending.size() >= 24) break;
+                        if (std::find(seen.begin(), seen.end(), s.lang) != seen.end()) continue;
+                        seen.push_back(s.lang);
+                        this->pending.push_back(s);
+                    }
+                    if (this->fileLoaded) this->attach();
+                },
+                [pending](const std::string& e) {
+                    brls::Logger::warning("subtitles addon: {}", e);
+                    --(*pending);
+                },
+                url);
+        }
+    }
+
+private:
+    void init() {
+        if (this->inited) return;
+        this->inited = true;
+        MPVCore::instance().getEvent()->subscribe([this](MpvEventEnum e) {
+            switch (e) {
+            case MpvEventEnum::MPV_LOADED:
+                this->fileLoaded = true;
+                this->attach();
+                break;
+            case MpvEventEnum::MPV_STOP:
+            case MpvEventEnum::END_OF_FILE:
+                this->fileLoaded = false;
+                this->pending.clear();
+                break;
+            default:
+                break;
+            }
+        });
+    }
+
+    void attach() {
+        auto& mpv = MPVCore::instance();
+        for (auto& s : this->pending) {
+            std::string title = s.lang.empty() ? "External" : s.lang;
+            // "auto" = add without selecting; the user picks via the + menu.
+            mpv.command("sub-add", s.url.c_str(), "auto", title.c_str(), s.lang.c_str());
+        }
+        this->pending.clear();
+    }
+
+    bool inited = false;
+    bool fileLoaded = false;
+    int requestTicket = 0;
+    std::vector<stremio::Subtitle> pending;
+};
+
+// Clean text row built in code: name on top, full description below.
+class StreamCell : public RecyclingGridItem {
+public:
+    StreamCell() {
+        this->setFocusable(true);
+        this->setAxis(brls::Axis::COLUMN);
+        this->setPadding(12, 20, 12, 20);
+        this->setCornerRadius(6);
+
+        this->name = new brls::Label();
+        this->name->setFontSize(24);
+        this->addView(this->name);
+
+        this->action = new brls::Label();
+        this->action->setText("A Play");
+        this->action->setFontSize(17);
+        this->action->setTextColor(nvgRGB(240, 242, 248));
+        this->action->setVisibility(brls::Visibility::GONE);
+        this->action->setMarginTop(4);
+        this->addView(this->action);
+
+        this->detail = new brls::Label();
+        this->detail->setFontSize(18);
+        this->addView(this->detail);
+    }
+
+    void onFocusGained() override {
+        RecyclingGridItem::onFocusGained();
+        this->action->setVisibility(brls::Visibility::VISIBLE);
+    }
+
+    void onFocusLost() override {
+        this->action->setVisibility(brls::Visibility::GONE);
+        RecyclingGridItem::onFocusLost();
+    }
+
+    brls::Label* name = nullptr;
+    brls::Label* action = nullptr;
+    brls::Label* detail = nullptr;
+};
+
+class StreamSource : public RecyclingGridDataSource {
+public:
+    StreamSource(const ResumeEntry& key, const std::vector<stremio::Stream>& s) : key(key), list(std::move(s)) {}
+
+    size_t getItemCount() override { return this->list.size(); }
+
+    RecyclingGridItem* cellForRow(RecyclingView* recycler, size_t index) override {
+        StreamCell* cell = dynamic_cast<StreamCell*>(recycler->dequeueReusableCell("Cell"));
+        auto& s = this->list.at(index);
+
+        std::string name = s.name;
+        std::replace(name.begin(), name.end(), '\n', ' ');
+        std::string desc = !s.description.empty() ? s.description : s.title;
+        std::replace(desc.begin(), desc.end(), '\n', ' ');
+
+        cell->action->setVisibility(brls::Visibility::GONE);
+        cell->name->setText(name.empty() ? "Stream" : name);
+        cell->detail->setText(desc);
+        return cell;
+    }
+
+    void onItemSelected(brls::Box* recycler, size_t index) override {
+        auto s = this->list.at(index);
+        if (s.url.empty()) {
+            brls::Application::notify("This stream has no URL");
+            return;
+        }
+        // Remember what we're playing so the tracker can resume/record by id.
+        ResumeTracker::instance().setCurrent(this->key);
+        // Ask the subtitles addon (if configured) for subs for this title.
+        SubLoader::instance().prepare(this->key.streamType, this->key.streamId);
+        // Prefer English audio tracks for this (and subsequent) playback.
+        MPVCore::instance().command("set", "alang", "eng,en");
+        // Show the media title (movie name / "Series · S1E5 · Episode") on the
+        // player OSD, not the raw stream/source name.
+        std::string title = this->key.name.empty() ? s.name : this->key.name;
+        RemoteView::play(s.url, title);
+    }
+
+    void clearData() override { this->list.clear(); }
+
+private:
+    ResumeEntry key;
+    std::vector<stremio::Stream> list;
+};
+
+}  // namespace
+
+StreamPicker::StreamPicker(
+    const std::string& title, const std::vector<stremio::Stream>& streams, const ResumeEntry& resumeKey)
+    : resumeKey(resumeKey) {
+    brls::Logger::debug("StreamPicker: {} streams", streams.size());
+    this->setAxis(brls::Axis::COLUMN);
+    this->setDimensions(brls::Application::contentWidth, brls::Application::contentHeight);
+    this->setBackgroundColor(brls::Application::getTheme()["brls/background"]);
+    this->setPadding(20, 40, 20, 40);
+    // Hold focus here (hidden highlight) while the list loads / when empty,
+    // so the outline can't float over the covered detail screen.
+    this->setFocusable(true);
+    this->setHideHighlight(true);
+
+    this->recycler = new RecyclingGrid();
+    this->recycler->setGrow(1.0f);
+    this->recycler->setScrollingIndicatorVisible(false);
+    this->recycler->spanCount = 1;
+    this->recycler->isFlowMode = true;
+    this->recycler->estimatedRowSpace = 10;
+    this->recycler->registerCell("Cell", []() -> RecyclingGridItem* { return new StreamCell(); });
+    this->addView(this->recycler);
+
+    this->actionBar = new ActionBar();
+    this->addView(this->actionBar);
+
+    // Addons (e.g. AIOStreams) may return non-playable info entries alongside
+    // real streams — "Removal Reasons", "no results", etc. — with no URL.
+    // Keep only playable streams so the user can't select a dead entry.
+    std::vector<stremio::Stream> playable;
+    for (auto& s : streams)
+        if (!s.url.empty()) playable.push_back(s);
+    this->allStreams = std::move(playable);
+
+    this->applyStreamView();
+    // Defer focus until after the activity is on screen.
+    brls::sync([this]() { brls::Application::giveFocus(this); });
+    brls::sync([this]() { brls::Application::giveFocus(this->recycler); });
+
+    this->registerAction("hints/back"_i18n, brls::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    });
+
+    this->registerAction("Filter", brls::BUTTON_X, [this](brls::View*) {
+        this->hdOnly = !this->hdOnly;
+        this->applyStreamView();
+        return true;
+    });
+
+    this->registerAction("Sort", brls::BUTTON_Y, [this](brls::View*) {
+        this->sortByQuality = !this->sortByQuality;
+        this->applyStreamView();
+        return true;
+    });
+}
+
+void StreamPicker::applyStreamView() {
+    std::vector<stremio::Stream> visible;
+    for (auto& stream : this->allStreams)
+        if (!this->hdOnly || isHdStream(stream)) visible.push_back(stream);
+
+    if (this->sortByQuality) {
+        std::stable_sort(visible.begin(), visible.end(), [](const stremio::Stream& lhs, const stremio::Stream& rhs) {
+            return streamQualityScore(lhs) > streamQualityScore(rhs);
+        });
+    }
+
+    if (visible.empty()) {
+        brls::Application::giveFocus(this);
+        if (this->allStreams.empty())
+            this->recycler->setEmpty("No playable streams — check your addon's quality/resolution filters");
+        else
+            this->recycler->setEmpty("No HD streams in this result");
+    } else {
+        this->recycler->setDataSource(new StreamSource(this->resumeKey, visible));
+        brls::sync([this]() { brls::Application::giveFocus(this->recycler); });
+    }
+
+    this->updateActionBar();
+}
+
+void StreamPicker::updateActionBar() {
+    if (!this->actionBar) return;
+    this->actionBar->setActions({
+        {brls::BUTTON_A, "Play"},
+        {brls::BUTTON_B, "Back"},
+        {brls::BUTTON_X, this->hdOnly ? "Filter: HD" : "Filter: All"},
+        {brls::BUTTON_Y, this->sortByQuality ? "Sort: Quality" : "Sort: Default"},
+    });
+}

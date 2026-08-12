@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.LordBillBR.ReelNX</id>
+  <name>ReelNX</name>
+  <summary>Independent media client with Stremio Addon Protocol support</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <description>
+    <p>ReelNX is an independent open-source media client for Nintendo Switch homebrew with support for the Stremio Addon Protocol.</p>
+    <p>This project is not affiliated with or endorsed by Stremio or Nintendo.</p>
+  </description>
+  <launchable type="desktop-id">io.github.LordBillBR.ReelNX.desktop</launchable>
+  <url type="vcs-browser">https://github.com/LordBillBR/ReelNX</url>
+  <url type="bugtracker">https://github.com/LordBillBR/ReelNX/issues</url>
+  <content_rating type="oars-1.1" />
+</component>

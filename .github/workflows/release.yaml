@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-nx:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkita64:20260219
+    env:
+      BASE_URL: https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Derive version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          test -n "$VERSION"
+          echo "$VERSION" > VERSION
+          echo "REELNX_VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Install portlibs
+        run: |
+          for pkg in mbedtls-3.6.5-1 libssh2-1.11.1-1 dav1d-1.5.3-1 curl-8.16.0-2 ffmpeg-7.1.5-5 libmpv-0.36.0-5; do
+            dkp-pacman --noconfirm -U $BASE_URL/switch-${pkg}-any.pkg.tar.zst
+          done
+          git config --system --add safe.directory $GITHUB_WORKSPACE
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPLATFORM_SWITCH=ON \
+            -DBUILTIN_NSP=OFF \
+            -DBOREALIS_USE_DEKO3D=ON \
+            -DREELNX_VERSION="$REELNX_VERSION" \
+            -DVERSION_BUILD=${{ github.run_number }}
+      - name: Build NRO
+        run: cmake --build build --target ReelNX.nro -j$(nproc)
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ReelNX ${{ github.ref_name }}
+          files: build/ReelNX.nro
+          body: |
+            ReelNX Nintendo Switch homebrew build.
+
+            Copy `ReelNX.nro` to `sdmc:/switch/ReelNX/ReelNX.nro`.

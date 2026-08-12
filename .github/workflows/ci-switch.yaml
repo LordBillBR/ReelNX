@@ -1,0 +1,47 @@
+name: CI Switch NRO
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+    paths-ignore:
+      - README.md
+      - images/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-nx:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkita64:20260219
+    env:
+      BASE_URL: https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install portlibs
+        run: |
+          for pkg in mbedtls-3.6.5-1 libssh2-1.11.1-1 dav1d-1.5.3-1 curl-8.16.0-2 ffmpeg-7.1.5-5 libmpv-0.36.0-5; do
+            dkp-pacman --noconfirm -U $BASE_URL/switch-${pkg}-any.pkg.tar.zst
+          done
+          git config --system --add safe.directory $GITHUB_WORKSPACE
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPLATFORM_SWITCH=ON \
+            -DBUILTIN_NSP=OFF \
+            -DBOREALIS_USE_DEKO3D=ON \
+            -DVERSION_BUILD=${{ github.run_number }}
+      - name: Build NRO
+        run: cmake --build build --target ReelNX.nro -j$(nproc)
+      - name: Upload NRO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReelNX-NintendoSwitch
+          path: build/ReelNX.nro

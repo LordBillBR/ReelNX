@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=ReelNX
+Comment=Independent media client with Stremio Addon Protocol support
+Exec=ReelNX
+Icon=io.github.LordBillBR.ReelNX
+Categories=AudioVideo;Player;
