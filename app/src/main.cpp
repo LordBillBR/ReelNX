@@ -24,6 +24,7 @@
 #include "view/text_box.hpp"
 #include "view/icon_button.hpp"
 #include "view/mpv_core.hpp"
+#include "view/stremio_theme.hpp"
 
 #include "activity/main_activity.hpp"
 #include "activity/server_list.hpp"
@@ -41,6 +42,28 @@
 #endif
 
 using namespace brls::literals;  // for _i18n
+
+namespace {
+
+class ReelNXSplash : public brls::Box {
+public:
+    ReelNXSplash() {
+        this->setDimensions(brls::Application::contentWidth, brls::Application::contentHeight);
+        auto* splash = new brls::Image();
+        splash->setDimensions(brls::Application::contentWidth, brls::Application::contentHeight);
+        splash->setScalingType(brls::ImageScalingType::FILL);
+        splash->setImageFromRes("img/reelnx/splash_dev.png");
+        this->addView(splash);
+    }
+
+    void draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style,
+        brls::FrameContext* ctx) override {
+        stremio_theme::drawOceanBackground(vg, x, y, width, height);
+        brls::Box::draw(vg, x, y, width, height, style, ctx);
+    }
+};
+
+}  // namespace
 
 int main(int argc, char* argv[]) {
     std::vector<std::string> items;
@@ -117,11 +140,15 @@ int main(int argc, char* argv[]) {
     } else if (items.size() > 0) {
         RemoteView::play(items.front());
     } else {
+        brls::Application::pushActivity(new brls::Activity(new ReelNXSplash()), brls::TransitionAnimation::NONE);
         conf.checkLogin();
-        brls::Application::pushActivity(new brls::Activity(new StremioHome()));
-        if (!conf.getItem(AppConfig::STREMIO_ONBOARDING_DONE, false)) {
-            brls::Application::pushActivity(new brls::Activity(new StremioOnboarding()));
-        }
+        brls::delay(600, []() {
+            brls::Application::popActivity(brls::TransitionAnimation::NONE);
+            brls::Application::pushActivity(new brls::Activity(new StremioHome()), brls::TransitionAnimation::NONE);
+            if (!AppConfig::instance().getItem(AppConfig::STREMIO_ONBOARDING_DONE, false)) {
+                brls::Application::pushActivity(new brls::Activity(new StremioOnboarding()));
+            }
+        });
     }
 
     GA("open_app",

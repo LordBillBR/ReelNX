@@ -11,6 +11,7 @@
 
 #include <nlohmann/json.hpp>
 #include <borealis/core/logger.hpp>
+#include <borealis/core/assets.hpp>
 #include <borealis/core/thread.hpp>
 #include "api/http.hpp"
 #include "api/retry_policy.hpp"
@@ -148,6 +149,11 @@ inline std::string posterUrl(const std::string& id, const std::string& fallback)
         return url;
     }
     return fallback;
+}
+
+inline const std::string& defaultPosterUrl() {
+    static const std::string url = BRLS_ASSET("img/reelnx/poster2-3.png");
+    return url;
 }
 
 inline std::string addonConfigPath(const std::string& configDir) { return configDir + "/stremio_addon.json"; }

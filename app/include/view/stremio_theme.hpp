@@ -19,6 +19,17 @@ const NVGcolor TEXT_DIM = nvgRGB(168, 176, 192);  // secondary text
 // Paint the full-screen background: dark ocean blue fading to near-black,
 // blended with a purple glow at the top and a blue one at the bottom-left.
 inline void drawOceanBackground(NVGcontext* vg, float x, float y, float width, float height) {
+    static int background = 0;
+    if (background == 0) background = nvgCreateImage(vg, BRLS_ASSET("img/reelnx/background_principal.png"), 0);
+    if (background > 0) {
+        NVGpaint image = nvgImagePattern(vg, x, y, width, height, 0, background, 1.0f);
+        nvgBeginPath(vg);
+        nvgRect(vg, x, y, width, height);
+        nvgFillPaint(vg, image);
+        nvgFill(vg);
+        return;
+    }
+
     // Base: deep navy -> near-black.
     NVGpaint base = nvgLinearGradient(vg, x, y, x, y + height, nvgRGB(17, 23, 49), nvgRGB(5, 7, 15));
     nvgBeginPath(vg);
